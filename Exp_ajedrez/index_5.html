@@ -1,0 +1,961 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>Intercambio y manejo ...</title>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta http-equiv="ScreenOrientation" content="autoRotate:disabled">
+    <!-- JS 
+    <script src="jatos.js"></script>-->
+
+
+    <script type="text/javascript" src="libs/jquery-3.7.0.js"></script>
+    <script type="text/javascript" src="libs/jquery-ui.js"> </script>
+    <script type="text/javascript" src="libs/jquery.ui.touch-punch.min.js"></script>
+
+
+    <link href="libs/jquery-ui.css" rel="stylesheet">
+
+    <!-- PRELOADING TODAS LAS IMAGENES-->
+    <link rel="preload" href="img/0_1.png" as="image" />
+    <link rel="preload" href="img/0_2.png" as="image" />
+    <link rel="preload" href="img/1_1.png" as="image" />
+    <link rel="preload" href="img/1_2.png" as="image" />
+    <link rel="preload" href="img/2_1.png" as="image" />
+    <link rel="preload" href="img/2_2.png" as="image" />
+    <link rel="preload" href="img/3_1.png" as="image" />
+    <link rel="preload" href="img/3_2.png" as="image" />
+
+</head>
+
+<body>
+</body>
+
+
+<script>
+
+    var ntab = 0;
+    var ntrial = 1;
+    var NargReq = 2; //cant de arg requeridos para habilitar el boton responder3 
+
+    var NTOT = 4; // cant de trials en tablero 1 y 2
+    var Vran = 3; // maximo rango de influencia en valoracion, con Vran=3, tengo valores 0,1,2 parejos, leve ventaja y ventaja
+    var EMIN = 1800; // elo minimo
+    var EMAX = 2500; // elo maximo
+
+    var data = { 1: [], 2: [], 3: [] }; // aca se guarda la data de los 3 juegos
+
+    // Variables de configuracion ===================================
+
+    var estructura_escenario = `
+
+        <div id="container">
+
+            <div id="ntablero" class="box"> </div>
+
+            <div id="mensaje" class="box">Blancas Mueven</div>
+            
+            <div class="fila">
+                <div class="col_slid">
+                    <div id="slider"> </div>
+                </div>
+
+                <div class="col_imag">
+                    <img id="imagen" src="" />
+                </div>
+            </div>
+
+
+            <div id="influencia" class="box"></div>
+
+            <div id="valoracion" class="box"></div>
+
+            <div id="argumentos"> </div>
+
+
+            <div class='box'>
+                <input id="responder" type="button" value="Responder" onclick="">
+            </div>
+
+        </div>
+    `
+
+    var estructura_instrucciones = `
+        
+        <div id="container">
+
+        <div id="instrucciones" class="box" > </div>
+
+        <div class='box'>
+            <input id="continuar" type="button" value="Continuar" onclick="">
+        </div>
+
+        </div>
+    
+    
+    `
+
+
+    var val2label = {
+        '4': "Mate blancas", '3': "Ventaja decisiva blancas", '2': "Ventaja blancas", '1': "Leve ventaja blancas",
+        '0': "Parejos", '-1': "Leve ventaja negras", '-2': "Ventaja negras", '-3': "Ventaja decisiva negras", '-4': "Mate negras"
+    };
+
+    var idArg2label = {
+        "1": "Ventaja Material",
+        "2": "Ventaja de Desarrollo",
+        "3": "Ventaja de Espacio",
+        "4": "Con Ataque",
+        "5": "Iniciativa",
+        "6": "Contrajuego",
+        "7": "Diagonal",
+        "8": "Centro",
+        "9": "Lineas",
+        "10": "Columna",
+        "11": "Flanco Rey",
+        "12": "Flanco Dama",
+        "13": "Casilla Debil",
+        "14": "Peones Unidos",
+        "15": "Peon Doblado",
+        "16": "Peon Aislado",
+        "17": "Peon Pasado",
+        "18": "Alfiles vs Caballos",
+        "19": "Alfiles de Distinto Color",
+        "20": "Material Compensado"
+    }
+
+    var BoN = { "1": "Blancas", "2": "Negras" }
+
+
+    //da vuelta el tablero
+    $(document).on("click", "#imagen", function () {
+
+        if ($(this).attr('src') == `img/${ntab}_1.png`)
+            $(this).attr('src', `img/${ntab}_2.png`);
+        else
+            $(this).attr('src', `img/${ntab}_1.png`);
+
+
+    });
+
+    // habilita boton responder3 si se chekean 3
+    $(document).on("click", ".arg", function () {
+
+        if ($('.arg:checked').length >= NargReq) {
+            $("#responder3").prop('disabled', false);
+        }
+        else {
+            $("#responder3").prop('disabled', true);
+        }
+    });
+
+    // habilita boon comenzar solo si dio consentimiento
+    $(document).on("click", "#consent", function () {
+
+        if ($("#consent").prop("checked"))
+            $("#comenzar").prop('disabled', false);
+        else
+            $("#comenzar").prop('disabled', true);
+    });
+    //==============================================================
+
+
+    // Form de bienvenida *******************************************
+
+    var construir_bienvenida = function () {
+
+        html = `
+        
+            <div id="container">
+                
+                <div class="col_imag">
+                    <img id='imagen_bienv' src='img/cabecera.jpg'>
+                </div>
+
+                <div class='box'> <h2>Intercambio y manejo de información en Ajedrez</h2> </div>
+                
+                <div style='text-align:center;'>
+                    <label for="fname">Nombre:</label><br>
+                    <input type="text" id="fname" name="fname" maxlength='10' ><br><br>
+
+                    <label for="fedad">Edad:</label><br>
+                    <input type="text" id="fedad" name="fedad" maxlength=2 ><br><br>
+
+                    <label for="frat">Rating:</label><br>
+                    <input type="text" id="frat" name="frat" ><br><br>
+                </div>
+
+                <div class='box'>
+                    <div class='box' style='text-align:left;'>
+                        <input id="consent" type="checkbox">
+                        <label for="consent">
+                            <span class='small'> Doy consentimiento explicito a los investigadores responsables de este estudio
+                                                de utilizar, con fines científicos y acádemicos, todos los datos que
+                                                mi participación genere.
+                            </span> 
+                        </label>
+
+                    </div>
+
+                    <div class='box' id="msj_error"> </div>
+
+                    <div class='box'>
+                        <input id="comenzar" type="button" value="Comenzar" onclick="comenzar()" disabled>
+                    </div>
+
+                    <div class='box'>
+                        <input id="probar" type="button" value="Probar" onclick="construir_prueba()">
+                    </div>
+                <div>
+
+            </div>
+        `
+
+        $("body").append(html)
+
+    };
+
+    var comenzar = function () {
+
+        var msj = "";
+        var nom = '';
+        var edad = ''
+        var rating = ''
+
+        var flag_1 = 0;
+
+        // cheque de datos ingresados
+        nom = $("#fname").val()
+
+        if (nom.length > 3) {
+
+            edad = $("#fedad").val()
+
+            if ($.isNumeric(edad)) {
+
+                rating = $("#frat").val()
+
+                if ($.isNumeric(rating)) {
+
+
+                    if (parseInt(rating) > 500 && parseInt(rating) < 2500) {
+
+                        flag_1 = 1;
+
+                    }
+                    else
+                        msj = "Rating fuera de rango normal ..."
+
+                }
+                else
+                    msj = "Rating debe ser un numero ..."
+
+            }
+            else
+                msj = "Edad debe ser un número ..."
+
+        }
+        else
+            msj = 'Nombre muy corto, minimo 4 caracteres ...'
+
+        //evaluo
+        flag_1 = 1;
+        if (flag_1) {
+            //guardo data y mando juego
+            $("#msj_error").html('')
+
+            data["nombre"] = nom;
+            data["edad"] = edad;
+            data["rating"] = rating;
+
+            $("#container").remove()
+            construir_instrucciones1();
+
+        }
+        else {
+            //mando mensaje de error
+            $("#msj_error").html(`<span style='color:red;'>${msj}</span>`)
+
+        }
+
+    };
+
+
+
+    // Hacer una prueba *********************************************
+
+    var activar_slider = function () {
+        $("#slider").slider({
+            orientation: "vertical",
+            min: -4,
+            max: 4,
+            step: 1,
+            range: "max",
+
+            slide: function (event, ui) {
+                $('#valoracion').html(`Tu valoración: <span class='small'> ${val2label[ui.value]}</span>`);
+                $("#responder").prop('disabled', false); // habilito boton responder cuando muevo barra
+            },
+        });
+
+    };
+
+
+    var construir_prueba = function () {
+
+        ntab = 1;
+        ntrial = 1
+
+        // Cargo escenario
+        $("#container").remove()
+        $("body").append(estructura_escenario)
+        $("#ntablero").text(ntab)
+        $("#imagen").attr("src", `img/0_1.png`);
+        $("#valoracion").text("Tu valoración: ")
+        $("#responder").attr("onclick", "responder0()")
+        $("#responder").prop('disabled', true);
+
+
+        html = `<div class='box' id="msj_error" style='color:Blue; text-align:left';> </div>
+        
+                <div class='box'> 
+                    <input id="salir" type="button" value="SALIR" onclick="salir()">
+                </div>
+        `
+
+        $("#container").append(html)
+
+        msj = `<span class='small' > 
+                <b>TIPS</b> <br>
+                - Mové la barra para valorar la partida 
+                (el botón responder se activará cuando muevas la barra). <br>
+                - Da click bobre el tablero para darlo vuelta.<br>
+                - Cuando hayas valorado la partida, presiona responder para ir al siguiente escenario.
+            </span>
+        `
+
+        $("#msj_error").html(msj)
+
+
+        activar_slider()
+
+    };
+
+
+    var responder0 = function(){
+
+        $("#responder").prop('disabled', true);
+
+        //influ = -Math.floor(Math.random() * 4);
+
+        influ = Math.floor(Math.random() * (3 - (-3) + 1) + (-3))
+    
+        $("#influencia").html(`Valoración de otro participante: <span class='small'>${val2label[influ]}</span>`)
+
+        $("#influencia").css( "border","3px solid red" );
+       
+
+        msj = `<span class='small' > 
+                <b>TIPS</b> <br>
+                - Noten que la barra quedo posisionada en tu respuesta previa.<br>
+                <span style="color:red">
+                - Debajo del tablero aparece información respecto de la valoración
+                de otro participante del experimento. La idea es que el participante si
+                lo cree pertinente utilice esa info para revisar su valoración incial.</span>
+                
+            </span>
+        `
+
+        $("#msj_error").html(msj)
+
+
+    };
+
+
+
+
+    // Primer tablero ***********************************************
+
+    var construir_instrucciones1 = function () {
+
+        ntab = 1;
+        ntrial = 1
+
+        $("body").append(estructura_instrucciones)
+
+
+        texto = `
+            <h2>Tablero Nº ${ntab}</h2> <br><br>
+            Instrucciones: <br><br>
+            Tu objetivo es valorar una posición. Después de un primer intento,
+            se te mostrará valoraciones de otros jugadores en este experimento.
+            La idea es que, si lo consideras pertiente, utilices esa información para 
+            revisar tu valoración inicial. <br><br>
+            ¡Buena suerte!<br><br>
+        `
+
+
+        $("#instrucciones").html(texto);
+
+        $("#continuar").attr("onclick", "construir_escenario1()")
+
+    };
+
+    var construir_escenario1 = function () {
+
+        // Cargo escenario
+        $("#container").remove()
+        $("body").append(estructura_escenario)
+        $("#ntablero").text(ntab)
+        $("#imagen").attr("src", `img/${ntab}_1.png`);
+        $("#valoracion").text("Tu valoración: ")
+        $("#responder").attr("onclick", "responder1()")
+        $("#responder").prop('disabled', true);
+
+        // la slider 
+        $("#slider").slider({
+            orientation: "vertical",
+            min: -4,
+            max: 4,
+            step: 1,
+            range: "max",
+
+            slide: function (event, ui) {
+                $('#valoracion').html(`Tu valoración: <span class='small'> ${val2label[ui.value]}</span>`);
+                $("#responder").prop('disabled', false); // habilito boton responder cuando muevo barra
+            },
+        });
+
+
+
+    }
+
+    var responder1 = function () {
+
+
+        $("#responder").prop('disabled', true);
+
+
+        if (ntrial < NTOT) {
+            // tomo datos
+            data[1].push({ "r": $("#slider").slider("value"), "i": -9 })
+
+            // seteo influencia dependiendo 1er resp
+            var influ = 0;
+
+            if (data[1][0]['r'] <= 0) {
+                influ = Math.floor(Math.random() * Vran);
+            }
+            else {
+                influ = -Math.floor(Math.random() * Vran);
+            }
+
+            $("#influencia").html(`Valoración de otro participante: <span class='small'>${val2label[influ]}</span>`)
+
+            data[1][data[1].length - 1]["i"] = influ;
+
+            ntrial += 1
+        }
+
+        else {
+
+            data[1].push({ "r": $("#slider").val(), "i": -9 })
+
+            $("#container").remove();
+
+            construir_instrucciones2();
+
+        }
+
+
+
+    };
+
+
+
+    // segundo tablero **********************************************
+
+    var construir_instrucciones2 = function () {
+
+        ntab = 2;
+        ntrial = 1
+
+        $("body").append(estructura_instrucciones)
+
+        texto = `
+            <h2>Tablero Nº ${ntab}</h2> <br> <br> 
+            Instrucciones: <br><br>
+            Igual que antes, tu objetivo es valorar una posición. En este caso, después de un primer intento,
+            se te mostrará valoraciones de otros jugadores en este experimento y su rating personal.
+            La idea es que, si lo consideras pertinente, utilices esa información para revisar tu valoración. <br><br>
+            ¡Buena suerte!<br> <br> 
+        `
+
+        $("#instrucciones").html(texto);
+
+        $("#continuar").attr("onclick", "construir_escenario2()")
+
+    };
+
+    var construir_escenario2 = function () {
+
+        // Cargo escenario
+        $("#container").remove()
+        $("body").append(estructura_escenario)
+        $("#ntablero").text(ntab)
+        $("#imagen").attr("src", `img/${ntab}_1.png`);
+        $("#valoracion").text("Tu valoracion: ")
+        $("#responder").attr("onclick", "responder2()")
+        $("#responder").prop('disabled', true);
+
+        // la slider 
+        $("#slider").slider({
+            orientation: "vertical",
+            min: -4,
+            max: 4,
+            step: 1,
+            range: "max",
+
+            slide: function (event, ui) {
+                $('#valoracion').html(`Tu valoración: <span class='small'> ${val2label[ui.value]}</span>`);
+                $("#responder").prop('disabled', false); // habilito boton responder cuando muevo barra
+            },
+        });
+
+
+    }
+
+    var responder2 = function () {
+
+        $("#responder").prop('disabled', true);
+
+        if (ntrial < NTOT) {
+            // tomo datos
+            data[2].push({ "r": $("#slider").slider("value"), "i": -9, "e": -9 })
+
+            // seteo influencia dependiendo 1er resp ----------
+            var influ = 0;
+
+            if (data[2][0]['r'] <= 0) {
+                influ = Math.floor(Math.random() * Vran);
+            }
+            else {
+                influ = -Math.floor(Math.random() * Vran);
+            }
+
+            //seteo elo 
+            var elo = Math.floor(Math.random() * (EMAX - EMIN + 1)) + EMIN;;
+
+            //-------------------------------------------------
+
+
+            $("#influencia").html(`Valoración de otro participante: <span class='small'>${val2label[influ]}</span>, Rating: <span class='small'>${elo}</span>`)
+
+            data[2][data[2].length - 1]["i"] = influ;
+            data[2][data[2].length - 1]["e"] = elo;
+
+            ntrial += 1
+        }
+
+        else {
+
+            data[2].push({ "r": $("#slider").val(), "i": -9, "e": -9 });
+
+            $("#container").remove();
+
+            construir_instrucciones3();
+
+
+        }
+
+
+
+    }
+
+
+    // Tercert tablero ***********************************************
+    var influ3 = {
+        1: {
+            "val": "<span class='small'>Parejos</span>",
+            "args": `<span class="small"> 
+                        "Con Ataque"/ Blancas y Negras, "Contrajuego"/ Blancas y Negras, 
+                        "Flanco rey"/ Blancas y Negras, "Peon Aislado"/ Blancas y Negras 
+                    </span>`,
+
+        },
+        2: {
+            "val": "<span class='small'>Leve ventaja Negras</span>",
+            "args": `<span class="small"> 
+                        "Con Ataque"/ Negras, "Iniciativa"/ Negras, 
+                        "Diagonal"/ Negras, "Centro"/Negras 
+                    </span>`,
+        },
+        3: {
+            "val": "<span class='small'>Leve ventaja Blancas</span>",
+            "args": `<span class="small"> 
+                        "Ventaja Material"/ Blancas, "Con Ataque"/ Blancas, 
+                        "Columna"/ Blancas, "Flanco Dama"/ Blancas, "Alfiles de Distinto Color"/ Blancas 
+                    </span>`,
+        }
+    }
+
+    var construir_instrucciones3 = function () {
+
+        ntab = 3;
+        ntrial = 1
+
+        $("body").append(estructura_instrucciones)
+
+        texto = `
+            <h2>Tablero Nº ${ntab}</h2> <br> <br> 
+            Instrucciones: <br><br>
+            Tu objetivo es valorar una posición y argumentar. 
+            En el primer intento se te mostrará una tabla con argumentos 
+            tabulados y se te pedirá que marques por lo menos tres.
+            Después del primer intento, se te mostrará la valoración de otro
+            participante y la lista de argumentos que utilizó.
+            Como antes, la idea es que si lo consideras pertinente, utilices esa información para revisar 
+            tu valoración inicial. <br><br>
+            ¡Buena suerte!<br> <br> 
+        `
+
+        $("#instrucciones").html(texto);
+
+        $("#continuar").attr("onclick", "construir_escenario3()")
+
+    };
+
+    var construir_escenario3 = function () {
+
+        // Cargo escenario
+        $("#container").remove()
+        $("body").append(estructura_escenario)
+        $("#ntablero").text(ntab)
+        $("#imagen").attr("src", `img/${ntab}_1.png`);
+        $("#valoracion").html("Tu valoración: <span class='small'> Parejos </span>")
+        $("#responder").attr("onclick", "responder3()")
+
+        $("#responder").attr("id", "responder3")         // cambio id de boton
+        $("#responder3").prop('disabled', true);        // la idea es tener una funcion distanta para enable/disable
+
+        // la slider 
+        $("#slider").slider({
+            orientation: "vertical",
+            min: -4,
+            max: 4,
+            step: 1,
+            range: "max",
+
+            slide: function (event, ui) {
+                $('#valoracion').html(`Tu valoración: <span class='small'> ${val2label[ui.value]}</span>`);
+                $("#responder").prop('disabled', false); // habilito boton responder cuando muevo barra
+            },
+        });
+
+        //tus argumentos
+        $("#argumentos").append("<div id='tus_args' class='box'> </div> ")
+
+
+        //agrego tabla de argumentos
+        tabla = `<div>
+                    <table id="tabla_args">
+                        <tr>
+                            <td>Argumento</td>
+                            <td>Blancas </td>
+                            <td>Negras </td>
+                        </tr>
+        `
+
+        for (const id of Object.keys(idArg2label)) {
+
+            tabla += `<tr>
+                        <td><span class="small">${idArg2label[id]}</span></td>
+                        <td><input type="checkbox" class='arg' id='${id}_1'> </td>
+                        <td><input type="checkbox" class='arg' id='${id}_2'> </td>
+                    </tr>
+            `
+        }
+        tabla += '</table></div>'
+
+        $("#argumentos").append(tabla)
+
+    }
+
+    var responder3 = function () {
+
+        // Tomo datos DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+        data[3].push({ "r": $("#slider").val(), "ref_i": ntrial, "args": [] })
+
+        // Obtengo los argumentos chequeados 
+        var args_text = "<span class='small'>"
+
+        $("input:checkbox").each(function () {
+
+            if ($(this).is(":checked")) {
+
+                argJug = $(this).attr("id") // nro argumento _ blanco o negro
+
+                data[3][data[3].length - 1]["args"].push(argJug); //guardo en ultimo elemento de data[3]
+
+                arg_Jug = argJug.split("_")
+
+                args_text += `"${idArg2label[arg_Jug[0]]}"/${BoN[arg_Jug[1]]}, `
+            }
+
+        });
+
+        $("#tus_args").html("Tus argumentos actuales : " + args_text + '</span>') // mensaje con los argumentos elejidos
+
+        //DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+
+
+        $("#responder3").prop('disabled', true); // desabilito
+        $(".arg").prop("checked", false); // descheckeo todo
+
+
+
+        if (ntrial < 4) {
+
+            $("#influencia").html(`Valoración de otro participante: ${influ3[ntrial]["val"]}, Argumentos: ${influ3[ntrial]["args"]}`);
+
+            ntrial += 1
+        }
+
+        else {
+
+            $("#container").remove();
+
+            construir_final();//ir a pagina final
+
+
+
+
+        }
+
+
+
+
+    };
+
+
+    // Final y despedida **********************************************
+
+    var construir_final = function () {
+
+        $("body").append(estructura_instrucciones)
+
+        texto = `
+            <h2>Gracias por participar!</h2> <br> <br> 
+            Cualquier consulta, duda, comentario, o si conoces
+            gente interesada en esta experiencia pasales este mail 
+            <b>achacoma@famaf.unc.edu.ar</b>, o que nos busque en Twitter
+            <b>@AndresChacoma</b>
+
+            
+        `
+
+        $("#instrucciones").html(texto);
+
+        $("#continuar").val("Inicio");
+
+        $("#continuar").attr("onclick", "salir()");
+
+
+        //console.log(JSON.stringify(data, undefined, 2));
+
+
+
+
+    };
+
+    var salir = function () {
+
+        $("#container").remove();
+
+        construir_bienvenida();
+
+    }
+
+
+
+
+
+
+
+    // EJECUTA AL CARGAR *********************************************
+
+    construir_bienvenida()
+    //construir_escenario1()
+
+
+
+
+
+
+
+    /*
+    jatos.onLoad(function () { //https://www.jatos.org/jsPsych-and-JATOS.html
+
+
+
+        //this is the bit that will initialize ("init") and run your experiment.
+        jsPsych.init({
+            timeline: timeline,
+            show_progress_bar: false, //not very informative if the bulk of your study is one looping timeline object, unfortunately
+            on_finish: function () {
+                //jsPsych.data.displayData(); //shows data output (in json format) on the screen after timeline ends
+                var resultJson = jsPsych.data.get().json();
+                jatos.endStudy(resultJson, 'success!', true) //sends data output to the JATOS server, adds a message to the result object, and shows an End Page to the user (https://www.jatos.org/jatos.js-Reference.html#jatosendstudy)
+            }
+        });
+    });
+    */
+
+
+
+
+</script>
+
+<style>
+    /*PARA SMARTHPHONES*/
+    @media only screen and (min-device-width : 360px) and (max-device-width : 640px) {
+        #container {
+            /*background-color: white;*/
+            width: 100%;
+            height: 100%;
+            box-sizing: border-box;
+            padding: 0px 2px 0px 2px;
+
+            font-family: "Lucida Console", "Courier New", monospace;
+            /*'Open Sans', 'Arial', sans-serif;*/
+            /*'Ubuntu';*/
+            font-size: 18px;
+            /*align-items: center;
+            text-align: left;*/
+            /*border: 1px solid black;*/
+        }
+    }
+
+    /*PARA COMPUS*/
+    @media screen and (min-device-width : 641px) {
+        #container {
+            /*background-color: white;*/
+            width: 40%;
+            /*EN COMPUS TOMO LA MITAD DE LA PANTALLA*/
+            height: 100%;
+            box-sizing: border-box;
+            padding: 0px 2px 0px 2px;
+
+            font-family: "Lucida Console", "Courier New", monospace;
+            /*'Open Sans', 'Arial', sans-serif;*/
+            /*'Ubuntu';*/
+            font-size: 18px;
+            /*align-items: center;
+            text-align: center;*/
+            /*border: 1px solid black;*/
+        }
+
+        body>#container {
+            /* Esto me centra container en body con */
+            margin: 0 auto;
+        }
+    }
+
+
+
+    #container>#instrucciones {
+        /* Esto me centra instrucc en container con */
+        margin: 0 auto;
+        width: 90%;
+    }
+
+
+    /* Esto me centra instrucc en container con */
+    /*#container  #imagen { margin: 0 auto; width: 90%; }  Esto hace q la imagen se adapte a los cambios de tamaño de la ventana*/
+
+    /* El cod q sigue es para hacer q la imagen y la slider esten en la misma linea y */
+    .fila {
+        text-align: center;
+        width: 95%;
+        /*cuanto ocupa resp al container*/
+        display: flex;
+    }
+
+    .col_imag {
+        display: inline-block;
+        vertical-align: middle;
+    }
+
+    .col_slid {
+        display: inline-block;
+        vertical-align: middle;
+    }
+
+    .col_imag #imagen_bienv {
+        margin: 0 auto;
+        width: 94%;
+    }
+
+    .col_imag #imagen {
+        margin: 0 auto;
+        width: 94%;
+    }
+
+    /* cuando modifico col_imag, la imagen se modifica para entrar*/
+    .col_slider #slider {
+        margin: 0 auto;
+        width: 5%;
+    }
+
+    .fila .col_imag {
+        margin: 0 auto;
+        width: 94%;
+    }
+
+    /* cuando modifico fila, col_imag se modifica para entrar*/
+    .fila .col_slid {
+        margin: 0 auto;
+        width: 5%;
+    }
+
+    /*Slider*/
+    #slider {
+        height: 100%;
+    }
+
+
+    #slider .ui-slider-range {
+        background: #353535;
+    }
+
+    #slider .ui-slider-handle {
+        background: black;
+        outline: none;
+        border: none;
+        width: 24px;
+        height: 24px;
+        border-radius: 100%;
+    }
+
+    .box {
+        padding: 15px;
+        text-align: center;
+    }
+
+
+    #tabla_args {
+
+        /*text-align: center;*/
+        border: 1px solid black;
+        margin-left: auto;
+        margin-right: auto;
+        /*background-color:   #f0d9b5 ;*/
+    }
+
+    .small {
+        font-size: 14px;
+    }
+</style>
+
+</html>
